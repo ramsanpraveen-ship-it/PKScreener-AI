@@ -1,0 +1,27 @@
+{
+  "start_date": "2026-05-26",
+  "end_date": "2026-11-26",
+  "initial_equity": 100000.0,
+  "final_equity": 101306.15856863974,
+  "total_return_pct": 1.306158568639737,
+  "cagr_pct": 2.6094746008150205,
+  "nifty50_tri_return_pct": 9.041621225270857,
+  "max_drawdown_pct": -1.1252461202279962,
+  "sharpe_annualized_rf_zero": 1.2756471262608902,
+  "trade_count": 12,
+  "winning_trades": 7,
+  "losing_trades": 5,
+  "win_rate_pct": 58.333333333333336,
+  "win_rate_95ci_pct": [
+    31.95,
+    80.67
+  ],
+  "gross_profit_net_rupees": 2078.57,
+  "gross_loss_net_rupees": 772.4,
+  "average_win_net_rupees": 296.94,
+  "average_loss_net_rupees": 154.48,
+  "average_win_loss_ratio": 1.9222,
+  "expectancy_net_rupees": 108.84749999999998,
+  "profit_factor": 2.6910538581046093,
+  "max_positions": 3
+}

@@ -1,0 +1,9 @@
+{
+  "entry": "Next session open after signal close, with adverse slippage",
+  "same_bar_stop_and_target": "Stop is assumed first",
+  "gap_stop": "Filled at the open with adverse slippage",
+  "holding_period": "Maximum 20 sessions; stop/target may exit earlier",
+  "universe": "Complete point-in-time NSE constituent history required",
+  "benchmark": "Nifty 50 Total Return Index, dividends reinvested",
+  "costs": "Delivery STT, stamp duty, SEBI/NSE fees, GST proxy and configurable brokerage; see source notes"
+}

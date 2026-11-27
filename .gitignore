@@ -1,0 +1,34 @@
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# Local configuration, credentials, databases, logs, and machine-specific files
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+*.log
+.DS_Store
+
+# Local scans, market data, and caches are not source code
+data/*
+!data/backtest/
+data/backtest/*
+!data/backtest/results/
+data/backtest/results/*
+!data/backtest/results/backtest_metrics.json
+!data/backtest/results/backtest_assumptions.json
+!data/backtest/results/backtest_trades.csv
+!data/backtest/results/backtest_equity_curve.csv
+screening_results_*.csv
