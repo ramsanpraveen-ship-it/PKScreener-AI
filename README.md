@@ -24,6 +24,9 @@ analysis.
   chronological walk-forward reporting when sufficient history is provided.
 - Optional local Ollama explanations. AI output cannot override Python prices,
   quantities, or risk decisions.
+- A read-only strategy-intelligence panel with non-gating VCP, relative-strength,
+  breakout, market-regime, MFE/MAE, and failure-tag diagnostics for the saved
+  baseline sample.
 
 ## Risk and execution boundaries
 
@@ -59,10 +62,10 @@ The database URL is read from `DATABASE_URL`. For a local PostgreSQL database:
 export DATABASE_URL='postgresql+psycopg://localhost/pkscreener_ai'
 ```
 
-Start the API from the project root:
+Start the API from the project root (the script creates a local bearer token on first launch):
 
 ```sh
-.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+./scripts/run_local_api.sh
 ```
 
 In a second terminal, start the dashboard:
@@ -73,7 +76,7 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. The API binds to loopback by default. For more
+Open `http://127.0.0.1:5173` and enter the token from the ignored `.env` file. The API requires the token and rejects non-loopback requests. For more
 dashboard and API details, see [DASHBOARD_README.md](DASHBOARD_README.md).
 
 ## Running tests and building the dashboard
@@ -101,6 +104,22 @@ To run a backtest after preparing a complete bundle, follow
 [BACKTEST_README.md](BACKTEST_README.md). The engine deliberately fails closed
 when historical membership, daily bars, dividends, or benchmark coverage are
 missing. It does not substitute today's constituents for historical members.
+
+The strategy-intelligence diagnostics are generated separately from the saved
+baseline artifacts:
+
+```sh
+.venv/bin/python tools/generate_strategy_intelligence_report.py
+```
+
+The command writes to a unique `data/backtest/experiments/` directory and
+refuses to overwrite the frozen baseline. It describes the inspected 12-trade
+sample only; it does not estimate a reliable win rate or select improved entry
+or exit rules. Alternative-entry/exit and five-year walk-forward validation
+remain blocked until sufficient untouched, provenance-checked historical data
+is available. See [the implementation plan](STRATEGY_INTELLIGENCE_IMPLEMENTATION_PLAN.md),
+[failure analysis](STRATEGY_FAILURE_ANALYSIS.md), and
+[experiment status](STRATEGY_EXPERIMENT_COMPARISON.md).
 
 ## Local-only integrations
 

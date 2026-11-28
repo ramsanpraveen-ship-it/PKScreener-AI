@@ -7,9 +7,10 @@ import {
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
-import { api, localDate, type Dashboard } from './api';
+import { api, clearApiToken, localDate, setApiToken, type Dashboard } from './api';
 import ForwardTrading from './ForwardTrading';
 import HistoricalReplay from './HistoricalReplay';
+import StrategyIntelligence from './StrategyIntelligence';
 
 const money = (value: number | string | null | undefined) => {
   const number = Number(value);
@@ -25,6 +26,8 @@ function Metric({ label, value, sub }: { label: string; value: string; sub?: str
 }
 
 export default function App() {
+  const [apiToken, setApiTokenState] = useState(() => sessionStorage.getItem('pkscreener.localApiToken') || '');
+  const [tokenInput, setTokenInput] = useState('');
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,7 +47,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiToken]);
 
   useEffect(() => {
     void refresh();
@@ -89,6 +92,15 @@ export default function App() {
     setManualConfirmed(false);
   };
 
+  const submitToken = (event: FormEvent) => {
+    event.preventDefault();
+    if (!tokenInput.trim()) return;
+    setApiToken(tokenInput.trim());
+    setApiTokenState(tokenInput.trim());
+    setTokenInput('');
+    setLoading(true);
+  };
+
   const freshness = data?.freshness;
   const isFresh = freshness?.status === 'FRESH';
 
@@ -101,11 +113,22 @@ export default function App() {
           <Typography variant="caption" color="text.secondary">NSE cash-equity research terminal</Typography>
         </Box>
         <Chip size="small" color="success" variant="outlined" label="LOCAL ONLY" />
+        {apiToken && <Button size="small" onClick={() => { clearApiToken(); setApiTokenState(''); setData(null); }}>Sign out</Button>}
         <IconButton onClick={() => void refresh()} aria-label="Refresh dashboard" sx={{ ml: 1 }}><RefreshIcon /></IconButton>
       </Toolbar>
     </AppBar>
 
     <Container maxWidth="xl" sx={{ mt: 3 }}>
+      {!apiToken && <Card sx={{ maxWidth: 520, mx: 'auto', mt: 8 }}><CardContent>
+        <Typography variant="h5" fontWeight={700} gutterBottom>Local API sign in</Typography>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>Enter the token configured in your local API environment. It stays in this browser tab session and is never sent to a remote server.</Typography>
+        <Box component="form" onSubmit={submitToken}>
+          <Stack spacing={2}><TextField label="Local API token" type="password" autoComplete="current-password" value={tokenInput} onChange={event => setTokenInput(event.target.value)} required />
+            <Button type="submit" variant="contained">Connect</Button></Stack>
+        </Box>
+        {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
+      </CardContent></Card>}
+      {apiToken && <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error} Start the local API to load the dashboard.</Alert>}
       {actionMessage && <Alert severity={/failed|Confirm|require|available|rejected|limit|not configured|unavailable|exceed/i.test(actionMessage) ? 'warning' : 'success'} onClose={() => setActionMessage('')} sx={{ mb: 2 }}>{actionMessage}</Alert>}
       {loading && !data ? <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 320 }}><CircularProgress /></Box> : data && <>
@@ -134,6 +157,7 @@ export default function App() {
 
         <ForwardTrading fresh={isFresh} expectedSession={freshness?.expected_session ?? null} />
         <HistoricalReplay />
+        <StrategyIntelligence />
 
 
         <Box className="lower-grid" sx={{ mt: 3 }}>
@@ -185,6 +209,7 @@ export default function App() {
           <Button variant="outlined" disabled={!data.telegram_configured} onClick={() => window.confirm('Send today’s fresh research candidates to your configured Telegram chat?') && void perform(() => api.sendTelegramAlert(), 'Fresh candidate alert sent to Telegram.')}>Send Telegram alert</Button>
           {!data.telegram_configured && <Chip variant="outlined" label="Telegram off · configure locally to enable" />}
         </Stack>
+      </>}
       </>}
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 4 }}>
         Paper simulation only. Daily trade state advances only after the local freshness gate validates every stock and benchmark session; Kite orders are disabled.

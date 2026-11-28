@@ -1,0 +1,97 @@
+{
+  "baseline_id": "pkscreener-vcp-baseline-2026-11-27",
+  "immutable_comparison": true,
+  "signal_gates": {
+    "trend_sma_days": [
+      50,
+      150,
+      200
+    ],
+    "trend_sma_slope_lookback": 20,
+    "trend_52week_lookback": 252,
+    "vcp_lookback_sessions": 180,
+    "vcp_required_contractions": 3,
+    "vcp_depths_must_strictly_decrease": true,
+    "contraction_volume_is_hard_gate": false,
+    "breakout_pivot_lookback": 60,
+    "breakout_buffer_pct": 0.1,
+    "breakout_volume_min_ratio": 1.5,
+    "breakout_candle_close_position_min": 0.7,
+    "breakout_max_extension_pct": 5.0,
+    "relative_strength_weights_by_sessions": {
+      "63": 0.4,
+      "126": 0.2,
+      "189": 0.2,
+      "252": 0.2
+    },
+    "relative_strength_horizons_sessions": [
+      63,
+      126,
+      189,
+      252
+    ],
+    "entry_fill": "next_session_open_with_adverse_slippage",
+    "stop_fill": "stop_first_on_same_bar; adverse open on gap-through-stop",
+    "reward_risk_target": 2.0,
+    "max_swing_age_sessions": 60,
+    "atr_stop_buffer": 0.25,
+    "max_holding_sessions": 20,
+    "minimum_price": 100.0,
+    "minimum_average_traded_value_20d": 50000000.0,
+    "liquidity_lookback_sessions": 20
+  },
+  "risk_limits": {
+    "initial_capital": 100000,
+    "max_deployment": 60000,
+    "max_risk_per_trade": 500,
+    "max_aggregate_open_risk": 1500,
+    "max_positions": 3,
+    "max_position_value": 20000.0
+  },
+  "backtest_config": {
+    "initial_capital": 100000.0,
+    "max_deployment": 60000.0,
+    "max_risk_per_trade": 500.0,
+    "max_positions": 3,
+    "max_position_value": 20000.0,
+    "max_holding_sessions": 20,
+    "slippage_bps_per_side": 5.0,
+    "brokerage_bps_per_side": 0.0,
+    "gst_rate": 0.18,
+    "include_statutory_costs": true
+  },
+  "baseline_metrics": {
+    "start_date": "2026-05-26",
+    "end_date": "2026-11-26",
+    "initial_equity": 100000.0,
+    "final_equity": 101306.15856863974,
+    "total_return_pct": 1.306158568639737,
+    "cagr_pct": 2.6094746008150205,
+    "nifty50_tri_return_pct": 9.041621225270857,
+    "max_drawdown_pct": -1.1252461202279962,
+    "sharpe_annualized_rf_zero": 1.2756471262608902,
+    "trade_count": 12,
+    "winning_trades": 7,
+    "losing_trades": 5,
+    "win_rate_pct": 58.333333333333336,
+    "win_rate_95ci_pct": [
+      31.95,
+      80.67
+    ],
+    "gross_profit_net_rupees": 2078.57,
+    "gross_loss_net_rupees": 772.4,
+    "average_win_net_rupees": 296.94,
+    "average_loss_net_rupees": 154.48,
+    "average_win_loss_ratio": 1.9222,
+    "expectancy_net_rupees": 108.84749999999998,
+    "profit_factor": 2.6910538581046093,
+    "max_positions": 3
+  },
+  "artifact_sha256": {
+    "data/backtest/results/backtest_metrics.json": "24c24bcb0b46eb948b532bcc0db400ac62f0c7fe33eaba1037ed02deead0cb6f",
+    "data/backtest/results/backtest_assumptions.json": "630dbe34c00bf5772489d7e42bc1c2c0358fc2f1b88d60dc05c5bb2fe6274610",
+    "data/backtest/results/backtest_trades.csv": "44327efc26df231c29ec7c3ffbc287b76f3ca19b7b1eb9174c26536ed8c206c5",
+    "data/backtest/results/backtest_equity_curve.csv": "dce2bc03257bcb6e9ae3ea2a256c744058e991556db8eeb072b1c3a1637eb8ad"
+  },
+  "artifact_policy": "Do not overwrite these source artifacts; all experiments write to a separate directory."
+}

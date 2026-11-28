@@ -13,6 +13,8 @@ MAX_DEPLOYMENT = 60_000
 
 MAX_RISK_PER_TRADE = 500
 
+MAX_AGGREGATE_OPEN_RISK = MAX_RISK_PER_TRADE * 3
+
 MAX_OPEN_POSITIONS = 3
 
 MAX_POSITION_VALUE = (
@@ -58,7 +60,8 @@ def validate_account(account):
     required = [
         "total_capital",
         "deployed_capital",
-        "open_positions_count"
+        "open_positions_count",
+        "aggregate_open_risk",
     ]
 
     for key in required:
@@ -118,10 +121,16 @@ def validate_account(account):
             "Deployed capital exceeds deployment limit"
         )
 
+    aggregate_open_risk = finite_number(account["aggregate_open_risk"], "Aggregate open risk")
+    if aggregate_open_risk < 0 or aggregate_open_risk > MAX_AGGREGATE_OPEN_RISK:
+        raise ValueError("Aggregate open risk exceeds configured limit")
+
     return {
         "total_capital": total_capital,
         "deployed_capital": deployed_capital,
         "open_positions_count": open_positions,
+        "aggregate_open_risk": aggregate_open_risk,
+        "aggregate_risk_limit": MAX_AGGREGATE_OPEN_RISK,
         "deployment_limit": effective_deployment_limit
     }
 
@@ -278,9 +287,11 @@ def calculate_position_size(candidate, account):
     # 7. CALCULATE QUANTITY LIMITS
     # --------------------------------------
 
-    quantity_by_risk = math.floor(
-        MAX_RISK_PER_TRADE / risk_per_share
-    )
+    remaining_risk = max(0, validated_account["aggregate_risk_limit"] - validated_account["aggregate_open_risk"])
+    per_trade_budget = min(MAX_RISK_PER_TRADE, remaining_risk)
+    if per_trade_budget <= 0:
+        return reject("AGGREGATE_RISK_LIMIT_REACHED", "No aggregate portfolio risk capacity remains")
+    quantity_by_risk = math.floor(per_trade_budget / risk_per_share)
 
     allocation_limit = min(
         MAX_POSITION_VALUE,
@@ -365,7 +376,7 @@ def calculate_position_size(candidate, account):
             maximum_trade_risk, 2
         ),
 
-        "risk_budget": MAX_RISK_PER_TRADE,
+        "risk_budget": per_trade_budget,
 
         "allocation_limit": round(
             allocation_limit, 2
@@ -421,7 +432,8 @@ if __name__ == "__main__":
 
         "deployed_capital": 0,
 
-        "open_positions_count": 0
+        "open_positions_count": 0,
+        "aggregate_open_risk": 0,
     }
 
     result = calculate_position_size(

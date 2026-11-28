@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 import re
 import os
+import secrets
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from starlette.responses import JSONResponse
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,7 @@ from risk_manager import (
     MAX_RISK_PER_TRADE,
     MAX_OPEN_POSITIONS,
     MAX_POSITION_VALUE,
+    MAX_AGGREGATE_OPEN_RISK,
 )
 from .db import SessionLocal, get_db, initialize_database
 from .models import PaperTrade, PortfolioPosition, WatchlistItem
@@ -58,8 +61,27 @@ app.add_middleware(
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.middleware("http")
+async def require_local_api_token(request, call_next):
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    client_host = request.client.host if request.client else ""
+    if client_host not in {"127.0.0.1", "::1", "localhost"}:
+        return JSONResponse({"detail": "Local API access only"}, status_code=403)
+    if request.url.path == "/api/health":
+        return await call_next(request)
+    configured = os.environ.get("PKSCREENER_API_TOKEN", "")
+    supplied = request.headers.get("Authorization", "")
+    expected = f"Bearer {configured}" if configured else ""
+    if not configured:
+        return JSONResponse({"detail": "Local API token is not configured"}, status_code=503)
+    if not secrets.compare_digest(supplied, expected):
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    return await call_next(request)
 
 
 def _expected_session():
@@ -158,6 +180,53 @@ def historical_backtest():
     }
 
 
+@app.get("/api/strategy-intelligence")
+def strategy_intelligence():
+    """Read the newest non-gating baseline feature/failure diagnostic artifact."""
+    experiment_root = PROJECT_ROOT / "data" / "backtest" / "experiments"
+    reports = sorted(experiment_root.glob("strategy_intelligence_*/diagnostics.json"))
+    if not reports:
+        return {"available": False, "live_orders_enabled": False}
+    path = reports[-1]
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=503, detail=f"Strategy diagnostic is unavailable: {error}")
+    trades = [{
+        "symbol": item["symbol"],
+        "signal_date": item["signal_date"],
+        "net_pnl": item["net_pnl"],
+        "exit_reason": item["exit_reason"],
+        "market_regime": item["market_regime"]["classification"],
+        "rs_percentile": item["relative_strength"]["internal_cross_sectional_relative_percentile"],
+        "contraction_depths_pct": item["vcp_features"]["contraction_depths_pct_oldest_to_newest"],
+        "higher_lows": item["vcp_features"]["higher_lows"],
+        "contraction_volume_ratio": item["vcp_features"]["average_contraction_volume_ratio"],
+        "breakout_relative_volume": item["breakout_features"]["relative_volume_20d"],
+        "breakout_close_position": item["breakout_features"]["breakout_close_position"],
+        "mfe_r": item["excursion"]["mfe_r"],
+        "mae_r": item["excursion"]["mae_r"],
+        "first_threshold": item["excursion"]["first_threshold"],
+        "loss_tags": item["descriptive_loss_tags"],
+        "censored_at_test_end": item["censored_at_test_end"],
+    } for item in report.get("trades", [])]
+    return {
+        "available": True,
+        "baseline_id": report.get("baseline_id"),
+        "generated_at": report.get("generated_at"),
+        "performance_window": report.get("performance_window"),
+        "trade_count": report.get("trade_count"),
+        "baseline_metrics": report.get("baseline_metrics"),
+        "diagnostic_summary": report.get("diagnostic_summary"),
+        "loss_tag_counts": report.get("loss_tag_counts", {}),
+        "feature_semantics": report.get("feature_semantics", {}),
+        "experiment_status": report.get("experiment_status"),
+        "limitations": report.get("limitations", []),
+        "trades": trades,
+        "live_orders_enabled": False,
+    }
+
+
 @app.get("/api/dashboard")
 def dashboard():
     scan = _scan()
@@ -190,6 +259,7 @@ def dashboard():
             "max_risk_per_trade": MAX_RISK_PER_TRADE,
             "max_open_positions": MAX_OPEN_POSITIONS,
             "max_position_value": MAX_POSITION_VALUE,
+        "max_aggregate_open_risk": MAX_AGGREGATE_OPEN_RISK,
             "holding_sessions": [2, 20],
         },
         "watchlist": watchlist,
@@ -242,6 +312,7 @@ def get_portfolio(db: Session = Depends(get_db)):
 
 @app.post("/api/portfolio", status_code=201)
 def add_manual_position(body: ManualPositionRequest, db: Session = Depends(get_db)):
+    db.execute(text("SELECT pg_advisory_xact_lock(505051)"))
     if body.manual_recorded is not True:
         raise HTTPException(status_code=422, detail="Confirm this is a manually recorded existing position")
     symbol = _clean_symbol(body.symbol)
@@ -256,6 +327,9 @@ def add_manual_position(body: ManualPositionRequest, db: Session = Depends(get_d
     if investment > MAX_POSITION_VALUE:
         raise HTTPException(status_code=422, detail="Recorded position exceeds the ₹20,000 per-position limit")
     open_items = db.scalars(select(PortfolioPosition).where(PortfolioPosition.status == "OPEN")).all()
+    aggregate_risk = sum((item.entry_price - item.stop_loss) * item.quantity for item in open_items)
+    if aggregate_risk + planned_risk > MAX_AGGREGATE_OPEN_RISK:
+        raise HTTPException(status_code=422, detail="Recorded positions would exceed the ₹1,500 aggregate risk limit")
     if len(open_items) >= MAX_OPEN_POSITIONS:
         raise HTTPException(status_code=422, detail="Maximum three open positions reached")
     deployed = sum(item.entry_price * item.quantity for item in open_items)
@@ -334,6 +408,7 @@ def get_paper_trades(db: Session = Depends(get_db)):
 
 @app.post("/api/paper-trades", status_code=201)
 def add_paper_trade(body: PaperTradeRequest, db: Session = Depends(get_db)):
+    db.execute(text("SELECT pg_advisory_xact_lock(505051)"))
     if body.simulation_confirmation is not True:
         raise HTTPException(status_code=422, detail="Confirm this is a simulated paper trade")
     symbol = _clean_symbol(body.symbol)
@@ -341,8 +416,9 @@ def add_paper_trade(body: PaperTradeRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="Target reference must be above entry price")
     open_items = db.scalars(select(PaperTrade).where(PaperTrade.status == "OPEN")).all()
     deployed = sum(item.entry_price * item.quantity for item in open_items)
+    aggregate_risk = sum((item.entry_price - item.stop_loss) * item.quantity for item in open_items)
     try:
-        validate_paper_entry(body.entry_price, body.stop_loss, body.quantity, len(open_items), deployed)
+        validate_paper_entry(body.entry_price, body.stop_loss, body.quantity, len(open_items), deployed, aggregate_risk)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     trade = PaperTrade(

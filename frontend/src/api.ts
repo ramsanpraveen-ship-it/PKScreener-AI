@@ -93,10 +93,51 @@ export type PaperTradeBook = {
   trades: PaperTrade[];
 };
 
+export type StrategyIntelligenceReport = {
+  available: boolean;
+  baseline_id?: string;
+  generated_at?: string;
+  performance_window?: { start: string; end: string };
+  trade_count?: number;
+  baseline_metrics?: Record<string, unknown>;
+  diagnostic_summary?: {
+    exit_reason_counts: Record<string, number>;
+    market_regime_groups: Record<string, { trade_count: number; wins: number; win_rate_pct: number; net_pnl: number }>;
+    average_mfe_r: number | null;
+    average_mae_r: number | null;
+    threshold_touch_counts: Record<string, number>;
+    censored_at_test_end: number;
+  };
+  loss_tag_counts?: Record<string, number>;
+  feature_semantics?: Record<string, string | boolean>;
+  experiment_status?: string;
+  limitations?: string[];
+  trades?: {
+    symbol: string; signal_date: string; net_pnl: number; exit_reason: string;
+    market_regime: string; rs_percentile: number | null; contraction_depths_pct: number[];
+    higher_lows: boolean | null; contraction_volume_ratio: number | null;
+    breakout_relative_volume: number | null; breakout_close_position: number | null;
+    mfe_r: number | null; mae_r: number | null; first_threshold: string;
+    loss_tags: string[]; censored_at_test_end: boolean;
+  }[];
+  live_orders_enabled?: false;
+};
+
+const TOKEN_KEY = 'pkscreener.localApiToken';
+
+export function setApiToken(token: string) {
+  sessionStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearApiToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = sessionStorage.getItem(TOKEN_KEY);
   const response = await fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -125,6 +166,7 @@ export const api = {
   paperTrades: () => request<PaperTradeBook>('/api/paper-trades'),
   forwardPaper: () => request<ForwardBook>('/api/forward-paper'),
   historicalBacktest: () => request<HistoricalReplay>('/api/backtest'),
+  strategyIntelligence: () => request<StrategyIntelligenceReport>('/api/strategy-intelligence'),
   setForwardPaperMode: (mode: string) => request<{mode: string}>('/api/forward-paper/mode', { method: 'PUT', body: JSON.stringify({mode}) }),
   approveForwardTrade: (id: number) => request(`/api/forward-paper/${id}/approve`, { method: 'POST', body: JSON.stringify({manual_confirmation: true}) }),
   addPaperTrade: (data: object) => request('/api/paper-trades', {

@@ -14,6 +14,7 @@ ACCOUNT = {
     "total_capital": 100_000,
     "deployed_capital": 0,
     "open_positions_count": 0,
+    "aggregate_open_risk": 0,
 }
 
 DEFAULT_SYMBOL = "RELIANCE"

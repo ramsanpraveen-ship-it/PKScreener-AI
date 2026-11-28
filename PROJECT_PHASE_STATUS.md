@@ -6,11 +6,11 @@ Updated 27 November 2026 (IST, 21:38). This is a local NSE cash-equity research 
 | --- | --- | --- |
 | 1. Market data and universe | Built | The inspected universe contains 496 raw symbols and 461 qualified symbols. |
 | 2. Technical analysis | Built | Swing, VCP, trend, relative strength, breakout, and entry/exit modules are implemented. |
-| 3. Risk management | Built | ₹100,000 capital, ₹60,000 deployment limit, ₹500 max risk per trade, ₹20,000 max allocation per position, maximum three positions, and 2–20 session holding guide. |
+| 3. Risk management | Improved; more limits pending | ₹100,000 capital, ₹60,000 deployment limit, ₹500 max risk per trade, ₹1,500 aggregate open risk, ₹20,000 max allocation per position, maximum three positions, and 2–20 session holding guide. Daily/weekly loss, drawdown, sector, and order-rate limits remain absent. |
 | 4. Reliable full-universe screener | Live validation passed | Completed-session guard, bounded retries/backoff, OHLCV validation, one benchmark download per scan, recent-window Yahoo retry, safe completed-session cache, and official NSE bhavcopy fallback. Full 461-symbol scan passed freshness for 27 Nov 2026 with zero analysis errors. Seven newer listings were explicitly excluded for fewer than 253 aligned sessions. |
 | 5. Historical backtest | Six-month exploratory replay completed; five-year remains pending | Built a dated 524-symbol EQ bundle and ran 26 May–26 Nov 2026: 12 trades, +1.31% net, 58.3% wins, 2.69 profit factor, −1.13% max drawdown. Nifty 50 TRI returned +9.04%. Evidence is low confidence (95% Wilson win-rate interval 31.95%–80.67%). This does not satisfy the five-year validation phase. |
 | 6. Local AI analyst | Implemented | Ollama/Qwen explanations are guarded by deterministic Python results; malformed AI values are replaced or rejected. |
-| 7. Dashboard and alerts | Implemented; historical replay section added | Dashboard renders freshness, forward paper book/history, and the read-only historical replay metrics/trade ledger. PostgreSQL is currently unavailable, so the separate manual watchlist/portfolio panel is disabled. The paper book uses SQLite. Telegram is unconfigured; real orders are disabled. |
+| 7. Dashboard and alerts | Implemented; local authorization added | Dashboard renders freshness, forward paper book/history, and the read-only historical replay metrics/trade ledger. API access requires a local token and loopback peer. PostgreSQL is currently unavailable, so the separate manual watchlist/portfolio panel is disabled. The paper book uses SQLite. Telegram is unconfigured; real orders are disabled. |
 | 8. Paper trading | Forward simulator and dashboard implemented; month-long evaluation pending | Daily fresh scans feed an idempotent local paper journal with three paper modes, next-session entries, automated exits, cost-aware scorecard, and history. The LaunchAgent is installed for weekdays at 17:30 IST. One fresh session is recorded (27 Nov); it produced zero eligible trades. Accumulate at least one month of completed sessions. Kite orders remain disabled. |
 
 ## Latest full-universe run
@@ -33,14 +33,15 @@ Artifacts:
 
 ## Verification
 
-- Python deterministic suite: 43 passed, including completed-session trimming, stale/mismatched data, invalid OHLCV, retry bounds, fallback behavior, win/loss metrics, and assumptions-file output.
-- Backend scan-service suite: 4 passed.
+- Python deterministic suite: 52 passed, including completed-session trimming, stale/mismatched data, invalid OHLCV, risk caps, paper freshness/idempotency/concurrency, retry bounds, fallback behavior, win/loss metrics, and assumptions-file output.
+- Backend suite: 9 passed, including local-token authorization, loopback enforcement, finite numeric validation, and scan-service freshness behavior.
 - Frontend production build: passed.
 - Local API health and dashboard endpoints returned HTTP 200; health reports `FRESH`, database available, `local_only=true`, `orders_enabled=false`, and Telegram unconfigured.
 - Browser-rendered dashboard verified `FRESH · 2026-11-27`, one paper session, zero eligible setups, and zero trades.
 - Python syntax compilation and frontend production build passed after the paper workflow changes. The build reports a non-blocking ~502 kB JavaScript chunk warning.
 - `GET /api/forward-paper` returned HTTP 200 with the 27 Nov session and zero trades. The weekday 17:30 LaunchAgent is loaded; today’s run was started manually before its scheduled trigger.
 - No live orders or Telegram alerts were sent.
+- Frontend API token is stored in tab-scoped session storage. `scripts/run_local_api.sh` creates a local token in ignored `.env` on first run.
 
 ## Data source and assumptions
 
@@ -88,3 +89,13 @@ Artifacts:
 - Added trade-history and scorecard endpoints/UI and a weekday 17:30 macOS LaunchAgent installer. The screener default is now the full qualified universe.
 - Live Kite execution remains disabled pending the requested month of paper evaluation.
 - Historical 2021–present performance remains blocked: `data/backtest/` still lacks the required point-in-time universe and complete sourced history. The current-universe cache is not presented as a historical result.
+- The owner-provided Kaggle dataset version 2 was downloaded and inspected in ignored local storage. It is not accepted for backtesting: it ends in June 2026, lacks dated index membership and TRI benchmark series, and contains 65,279 fully missing OHLCV rows plus 2,131 zero-volume rows in the “complete” file. See `KAGGLE_DATASET_ASSESSMENT.md`.
+
+## Strategy intelligence and signal-quality review (28 November 2026)
+
+- Fingerprinted the saved six-month baseline in `STRATEGY_BASELINE_SNAPSHOT.json`, including hashes of its metrics, assumptions, trade ledger, and equity curve. The new report generator fails if those source artifacts change and writes only to a unique experiment directory.
+- Added deterministic, as-of-date-safe, non-gating measurements for VCP structure/volume, relative strength, breakout context, Nifty regime, and eligible-universe breadth. Added synthetic tests for date cutoffs and measurement behavior.
+- Generated descriptive diagnostics for the existing 12 trades: MFE/MAE, 1R/2R and stop touches, regime, feature snapshots, and overlapping loss tags. These observations are exploratory and do not establish causes.
+- Added a local-token-protected read-only `/api/strategy-intelligence` endpoint and dashboard panel. Backtest, forward-paper, and broker results remain distinct; no broker execution capability was introduced.
+- **Validation outcome:** no strategy change passed validation. Retest/consolidation entries, alternate exits, feature ablations, and five-year walk-forward remain untested or blocked because the six-month sample has already been inspected and the data bundle lacks five-year point-in-time coverage plus warm-up. No win-rate improvement is claimed.
+- Details: `STRATEGY_INTELLIGENCE_IMPLEMENTATION_PLAN.md`, `STRATEGY_FAILURE_ANALYSIS.md`, and `STRATEGY_EXPERIMENT_COMPARISON.md`.

@@ -1,10 +1,10 @@
 """Deterministic helpers for a manual, simulated NSE cash-equity journal."""
 
 
-def validate_paper_entry(entry_price, stop_loss, quantity, open_positions, deployed):
+def validate_paper_entry(entry_price, stop_loss, quantity, open_positions, deployed, aggregate_open_risk=0):
     from risk_manager import (
         MAX_RISK_PER_TRADE, MAX_POSITION_VALUE, MAX_OPEN_POSITIONS,
-        MAX_DEPLOYMENT, TOTAL_CAPITAL,
+        MAX_DEPLOYMENT, TOTAL_CAPITAL, MAX_AGGREGATE_OPEN_RISK,
     )
 
     if stop_loss >= entry_price:
@@ -13,6 +13,8 @@ def validate_paper_entry(entry_price, stop_loss, quantity, open_positions, deplo
     investment = entry_price * quantity
     if risk > MAX_RISK_PER_TRADE:
         raise ValueError("Paper trade exceeds the ₹500 planned risk limit")
+    if aggregate_open_risk + risk > MAX_AGGREGATE_OPEN_RISK:
+        raise ValueError("Paper trade exceeds the ₹1,500 aggregate open risk limit")
     if investment > MAX_POSITION_VALUE:
         raise ValueError("Paper trade exceeds the ₹20,000 per-position limit")
     if open_positions >= MAX_OPEN_POSITIONS:

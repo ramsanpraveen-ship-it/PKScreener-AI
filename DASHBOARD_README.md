@@ -26,11 +26,11 @@ There is no Kite integration or real order-placement route.
    export DATABASE_URL='postgresql+psycopg://localhost/pkscreener_ai'
    ```
 
-2. Install the API dependencies and start the API from the project root:
+2. Install the API dependencies and start the API from the project root. On first launch, the script creates a random local token in ignored `.env`:
 
    ```sh
    .venv/bin/pip install -r backend/requirements.txt
-   .venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+   ./scripts/run_local_api.sh
    ```
 
 3. In a second terminal, install and start the dashboard:
@@ -42,7 +42,8 @@ There is no Kite integration or real order-placement route.
    ```
 
 The frontend is served at `http://127.0.0.1:5173`; API requests are proxied to
-`127.0.0.1:8000`. Bind addresses are local-only by default.
+`127.0.0.1:8000`. Enter the token from `.env` when the dashboard prompts. The API
+also rejects non-loopback peers and authenticated routes require that token.
 
 ## API routes
 
@@ -86,3 +87,13 @@ next-session execution. The displayed score is not a probability estimate.
 The paper journal is `data/forward_paper.sqlite3`. P&L estimates statutory
 charges and 5 bps per-side slippage, assumes zero broker brokerage, and excludes
 dividend cash actions.
+# Strategy intelligence
+
+The dashboard includes a read-only strategy intelligence panel backed by
+`GET /api/strategy-intelligence`. It presents non-gating feature measurements
+and descriptive MFE/MAE and loss-tag summaries for the saved baseline trades.
+The panel keeps these exploratory observations separate from historical
+backtest and forward-paper performance. The current 12-trade sample is not an
+untouched validation set; no win-rate improvement is claimed. See
+`STRATEGY_INTELLIGENCE_IMPLEMENTATION_PLAN.md` and
+`STRATEGY_EXPERIMENT_COMPARISON.md` for the data limitations and blocked tests.

@@ -9,7 +9,8 @@ import pandas as pd
 from market_data import _nse_eq_bar
 from nse_calendar import is_nse_trading_day
 from risk_manager import (MAX_DEPLOYMENT, MAX_OPEN_POSITIONS,
-                          MAX_POSITION_VALUE, MAX_RISK_PER_TRADE)
+                          MAX_POSITION_VALUE, MAX_RISK_PER_TRADE,
+                          MAX_AGGREGATE_OPEN_RISK)
 
 DB_PATH = Path(__file__).resolve().parent / "data" / "forward_paper.sqlite3"
 SLIPPAGE_BPS_PER_SIDE = 5.0
@@ -126,16 +127,17 @@ def process_fresh_scan(results_file, expected_session, metadata_file=None, db_pa
     """Advance one completed session exactly once; stale scans are rejected."""
     results_file = Path(results_file)
     expected = str(expected_session)
-    if metadata_file:
-        import json
-        meta = json.loads(Path(metadata_file).read_text(encoding="utf-8"))
-        dates = meta.get("stock_dates") or {}
-        if (meta.get("freshness_status") != "FRESH"
-                or meta.get("expected_session") != expected
-                or meta.get("benchmark_date") != expected
-                or meta.get("has_analysis_errors") is not False
-                or not dates or any(str(v) != expected for v in dates.values())):
-            raise ValueError("Freshness gate closed; paper book did not advance")
+    if metadata_file is None:
+        raise ValueError("Freshness metadata is required; paper book did not advance")
+    import json
+    meta = json.loads(Path(metadata_file).read_text(encoding="utf-8"))
+    dates = meta.get("stock_dates") or {}
+    if (meta.get("freshness_status") != "FRESH"
+            or meta.get("expected_session") != expected
+            or meta.get("benchmark_date") != expected
+            or meta.get("has_analysis_errors") is not False
+            or not dates or any(str(v) != expected for v in dates.values())):
+        raise ValueError("Freshness gate closed; paper book did not advance")
     with results_file.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     if not rows or any(row.get("analysis_date") != expected for row in rows):
@@ -143,7 +145,10 @@ def process_fresh_scan(results_file, expected_session, metadata_file=None, db_pa
 
     db = _connect(db_path)
     try:
+        # Serialize check, book advancement, and session marker as one write transaction.
+        db.execute("BEGIN IMMEDIATE")
         if db.execute("SELECT 1 FROM paper_sessions WHERE session_date=?", (expected,)).fetchone():
+            db.rollback()
             return {"status": "ALREADY_PROCESSED", "session_date": expected}
         # Advance existing open positions using the exact completed daily candle.
         closed = opened = 0
@@ -183,6 +188,7 @@ def process_fresh_scan(results_file, expected_session, metadata_file=None, db_pa
         queued = db.execute("SELECT * FROM forward_trades WHERE status='QUEUED' AND signal_date<? ORDER BY signal_rank DESC, symbol", (expected,)).fetchall()
         active = db.execute("SELECT * FROM forward_trades WHERE status='OPEN'").fetchall()
         deployed = sum(float(t["entry_price"]) * int(t["quantity"]) for t in active)
+        aggregate_risk = sum(max(0.0, (float(t["entry_price"]) - float(t["stop_loss"])) * int(t["quantity"])) for t in active)
         for trade in queued:
             signal_day = pd.Timestamp(trade["signal_date"]).date()
             if _next_nse_session(signal_day).isoformat() != expected:
@@ -204,7 +210,9 @@ def process_fresh_scan(results_file, expected_session, metadata_file=None, db_pa
             expected_stop = stop * (1 - SLIPPAGE_BPS_PER_SIDE / 10_000)
             risk_per_share = entry * (1 + buy_fee_rate) - expected_stop * (1 - sell_fee_rate)
             room = min(MAX_POSITION_VALUE, MAX_DEPLOYMENT - deployed)
-            qty = min(int(MAX_RISK_PER_TRADE // risk_per_share), int(room // (entry * (1 + buy_fee_rate))))
+            remaining_risk = max(0.0, MAX_AGGREGATE_OPEN_RISK - aggregate_risk)
+            risk_budget = min(MAX_RISK_PER_TRADE, remaining_risk)
+            qty = min(int(risk_budget // risk_per_share), int(room // (entry * (1 + buy_fee_rate))))
             if qty < 1:
                 db.execute("UPDATE forward_trades SET status='CANCELLED', exit_reason='RISK_OR_CAPITAL_CAP' WHERE id=?", (trade["id"],))
                 continue
@@ -216,6 +224,7 @@ def process_fresh_scan(results_file, expected_session, metadata_file=None, db_pa
             db.execute("UPDATE forward_trades SET status='OPEN', quantity=?, entry_date=?, entry_price=?, fees=?,mark_price=?,unrealized_pnl=?,holding_sessions=1 WHERE id=?",
                        (qty, expected, round(entry, 4), round(fee, 2), round(mark, 4), round(unrealized, 2), trade["id"]))
             deployed += qty * entry + fee
+            aggregate_risk += qty * risk_per_share
             active.append({"symbol": trade["symbol"]})
             opened += 1
             # Include entry-session intraday movement in the paper lifecycle.
